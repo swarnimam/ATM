@@ -172,6 +172,9 @@ class VerificationWindow(Tk):
         self.vs.release()
         cv2.destroyAllWindows()
 
+    def login_failed(self):
+        messagebox.showinfo(title='Attention!', message=f'Facial Verification Failed\n Sending message to Account Owner!')
+
     def video_loop(self):
         ok, frame = self.vs.read()
         if ok:
@@ -183,33 +186,32 @@ class VerificationWindow(Tk):
         self.after(30, self.video_loop)
 
     def verify(self):
-        pixels=np.asarray(self.current_image);
-        detections=VerificationWindow.embedder.extract(pixels,threshold=0.95);
+        pixels=np.asarray(self.current_image)
+        detections=VerificationWindow.embedder.extract(pixels,threshold=0.95)
         if len(detections)==0:
-            messagebox.showinfo(title='Attention!', message=f'No face detected, try again');
-            return;
+            messagebox.showinfo(title='Attention!', message=f'No face detected, try again')
+            return
         else:
             if len(detections)>1:
-                messagebox.showinfo(title='Attention!', message=f'Multiple faces detected, try again');
-                self.code_trial+=1;
+                messagebox.showinfo(title='Attention!', message=f'Multiple faces detected, try again')
+                self.code_trial+=1
                 print(f'Trial ={self.code_trial}')
-                return;
+                return
             else:
-                face_embedding=detections[0]['embedding'];
-                data=np.expand_dims(face_embedding,axis=1);
-                data=data.reshape(1,data.shape[0],data.shape[1]);
-                y=VerificationWindow.model.predict(data);
-                y=y.reshape(1);
-                print(VerificationWindow.customer,round(y[0]));
+                face_embedding=detections[0]['embedding']
+                data=np.expand_dims(face_embedding,axis=1)
+                data=data.reshape(1,data.shape[0],data.shape[1])
+                y=VerificationWindow.model.predict(data)
+                y=y.reshape(1)
+                print(VerificationWindow.customer,round(y[0]))
                 if int(VerificationWindow.customer)==round(y[0]):
-                    print("Facial Verification Successful.");
-                    self.destructor();
-                    AuthenticateWindow();
+                    print("Facial Verification Successful.")
+                    self.destructor()
+                    AuthenticateWindow()
                 else:
-                    print("Facial Verification Failed, Retry!")
-                    self.code_trial+=1;
-                    print(f'Trial ={self.code_trial}')
-                    return;
+                    self.login_failed()
+                    self.destroy()
+                    # Use Messaging API here (Future Work)
             if self.code_trial==3:
                 self.contact_customer_service()
                 self.destroy()
@@ -545,5 +547,5 @@ class Transaction(Tk):
 
 
 if __name__ == "__main__":
-    app = Application();
-    app.mainloop();
+    app = Application()
+    app.mainloop()
