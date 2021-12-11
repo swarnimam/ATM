@@ -16,6 +16,16 @@ values = [(1021, 'Kumar Swarnimam', 'Savings', 100000, 1234567890, 1111),
             (1023, 'Shah Rukh Khan', 'Current', 2500000, 1234567892, 3333)]
 cursor.executemany(stmt, values)
 
+temp=list();
+for i in range(1024,1435):
+    name="Customer No. "+str(i);
+    number=int("123456"+str(i));
+    data=[i,name,str("Savings"),int(100000),number,i];
+    temp.append(data);
+lst=[x for x in temp];
+cursor.executemany(stmt,lst);
+
+
 stmt = """CREATE TABLE Trxn(trxn_id INTEGER(4) PRIMARY KEY, 
                             accountNo INTEGER(10), 
                             amount VARCHAR(50), 

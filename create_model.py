@@ -1,89 +1,36 @@
-import os
-from PIL import Image;
-from mtcnn.mtcnn import MTCNN;
-from keras_facenet import FaceNet;
-from sklearn.preprocessing import Normalizer;
-from numpy import asarray;
-from keras.models import Sequential;
-from keras.layers import Dense, Conv1D, Flatten;
-from sklearn.metrics import mean_squared_error;
+from numpy import load;
+from sklearn.svm import SVC;
+from sklearn.metrics import mean_squared_error, accuracy_score;
 from matplotlib import pyplot as plt;
+from sklearn.preprocessing import LabelEncoder;
+import pickle;
 
-detector=MTCNN();
-embedder=FaceNet();
+data=load("data/data.npz",allow_pickle=True);
+trainX, trainy, testX, testy = data['arr_0'],data['arr_1'],data['arr_2'],data['arr_3'];
+trainX=trainX.reshape(trainX.shape[0],trainX.shape[1]);
+testX=testX.reshape(testX.shape[0],testX.shape[1]);
+print('Dataset: trainX=%s, testX=%s' % (trainX.shape, testX.shape));
+print('Dataset: trainy=%s, testy=%s' % (trainy.shape, testy.shape));
 
-def extract_face(filename,requiredsize=(160,160)):
-    image=Image.open(filename);
-    image=image.convert('RGB');
-    pixels=asarray(image);
-    results=detector.detect_faces(pixels);
-    if len(results)==0:
-        x1,y1,width,height=0,0,160,160;
-    else:
-        x1,y1,width,height=results[0]['box'];
-    x1,y1=abs(x1),abs(y1);
-    x2,y2=x1+width,y1+height;
-    face=pixels[y1:y2,x1:x2];
-    image=Image.fromarray(face);
-    image=image.resize(requiredsize);
-    face_array=asarray(image);
-    return face_array;
+out_encoder=LabelEncoder();
+out_encoder.fit(trainy);
+trainy=out_encoder.transform(trainy);
+testy=out_encoder.transform(testy);
 
-def load_faces(folder):
-    faces=list();
-    for filename in os.listdir(folder):
-        path=folder+filename;
-        face=extract_face(path);
-        faces.append(face);
-    return faces;
+model=SVC(kernel='linear',probability=True);
+model.fit(trainX,trainy);
+pickle.dump(model,open("data/atm_model.sav","wb"))
 
-def load_dataset(directory):
-    X,y=list(),list();
-    for subdir in os.listdir(directory):
-        path=directory+subdir+"/";
-        if not os.path.isdir(path):
-            continue;
-        faces=load_faces(path);
-        labels=[int(subdir) for _ in range(len(faces))];
-        print(">Loaded %d examples for : %s" % (len(faces),subdir));
-        X.extend(faces);
-        y.extend(labels);
-    return asarray(X),asarray(y);
+output_train=model.predict(trainX);
+output_test=model.predict(testX);
 
-def create_embeddings(data):
-    return embedder.embeddings(data);
+score_train=accuracy_score(trainy,output_train);
+score_test=accuracy_score(testy,output_test);
+print('Accuracy: train=%.3f, test=%.3f' % (score_train*100, score_test*100));
+print("MSE:%.4f"%mean_squared_error(testy,output_test));
 
-train_X,train_y=load_dataset("data/train/");
-test_X,test_y=load_dataset("data/test/");
-
-trainX=create_embeddings(train_X);
-trainy=train_y;
-testX=create_embeddings(test_X);
-testy=test_y;
-
-in_encoder=Normalizer(norm='l2');
-trainX=in_encoder.transform(trainX);
-testX=in_encoder.transform(testX);
-
-trainX=trainX.reshape(trainX.shape[0],trainX.shape[1],1);
-testX=testX.reshape(testX.shape[0],testX.shape[1],1);
-
-model=Sequential();
-model.add(Conv1D(32,2,activation="relu",input_shape=(512,1)));
-model.add(Flatten());
-model.add(Dense(64,activation="relu"));
-model.add(Dense(1));
-model.compile(loss="mse",optimizer="adam");
-model.summary();
-model.fit(trainX,trainy,batch_size=2,epochs=300,verbose=0);
-model.save('data/atm_model.h5');
-
-predictedy=model.predict(testX);
-print(model.evaluate(trainX,trainy));
-print("MSE:%.4f"%mean_squared_error(testy,predictedy));
-
-x_ax = range(len(predictedy))
+x_ax = range(len(output_test))
 plt.scatter(x_ax, testy, s=5, color="blue", label="Original")
-plt.plot(x_ax, predictedy, lw=0.8, color="red", label="Predicted")
+plt.plot(x_ax, output_test, lw=0.8, color="red", label="Predicted")
 plt.legend()
 plt.show()

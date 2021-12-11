@@ -1,18 +1,16 @@
 import datetime
 import numpy as np
+import pickle
 import socket
 import sqlite3
-import json
 import cv2
 from random import choice
 from PIL import Image as Img
 from PIL import ImageTk
-from keras.models import load_model
 from keras_facenet import FaceNet
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
-
 
 class Application(Tk):
 
@@ -29,19 +27,12 @@ class Application(Tk):
         self.pin_trial = 0
         self.customer_code = StringVar()
         self.pins = {'Customer code': 0}
-        self.connect_socket()
-        self.socket.send(str.encode('pin'))
-        self.pins = json.loads(bytes.decode(self.socket.recv(1024)))
-        Application.pins = self.pins
-        self.socket.send(str.encode('names'))
-        Application.names = json.loads(bytes.decode(self.socket.recv(1024)))
-        self.socket.send(str.encode('acct'))
-        Application.account_no = json.loads(bytes.decode(self.socket.recv(1024)))
-        self.socket.send(str.encode('balance'))
-        Application.balance = json.loads(bytes.decode(self.socket.recv(1024)))
-        self.socket.send(str.encode('trxn'))
-        Application.trxn_id = json.loads(bytes.decode(self.socket.recv(1024)))
-        self.socket.send(str.encode('q'))
+        self.pins=pins;
+        Application.pins=self.pins;
+        Application.names=names;
+        Application.account_no=account_no;
+        Application.balance=account_balance;
+        Application.trxn_id=trxn_id;
         self.grid()
         self.create_widgets()
 
@@ -82,8 +73,8 @@ class Application(Tk):
 
     def customer_exist(self, customer_code):
         for i in self.pins:
-            if customer_code == i:
-                return i
+            if str(customer_code) == str(i):
+                return customer_code;
         return None
 
     def contact_customer_service(self):
@@ -141,7 +132,7 @@ class Application(Tk):
 class VerificationWindow(Tk):
 
     embedder=FaceNet();
-    model=load_model('data/atm_model.h5');
+    model=pickle.load(open("data/atm_model.sav","rb"));
 
     def __init__(self):
         super().__init__()
@@ -154,7 +145,7 @@ class VerificationWindow(Tk):
         self.customer = Application.customer
         self.code_trial=0
         VerificationWindow.customer=self.customer;
-        VerificationWindow.name = Application.names[Application.customer].title()
+        VerificationWindow.name = Application.names[int(Application.customer)]
         self.vs = cv2.VideoCapture(0)
         self.current_image = None
         self.grid()
@@ -199,12 +190,11 @@ class VerificationWindow(Tk):
                 return
             else:
                 face_embedding=detections[0]['embedding']
-                data=np.expand_dims(face_embedding,axis=1)
-                data=data.reshape(1,data.shape[0],data.shape[1])
+                data=np.expand_dims(face_embedding,axis=0)
                 y=VerificationWindow.model.predict(data)
-                y=y.reshape(1)
-                print(VerificationWindow.customer,round(y[0]))
-                if int(VerificationWindow.customer)==round(y[0]):
+                prediction=y[0]+1021;
+                print(VerificationWindow.customer,prediction)
+                if int(VerificationWindow.customer)==prediction:
                     print("Facial Verification Successful.")
                     self.destructor()
                     AuthenticateWindow()
@@ -226,9 +216,9 @@ class AuthenticateWindow(Tk):
         h = 170
         self['bg'] = 'blue'
         Application.position_window(self, w, h)
-        self.customer = Application.customer
+        self.customer = int(Application.customer)
         self.pin_trial = 0
-        AuthenticateWindow.name = Application.names[Application.customer].title()
+        AuthenticateWindow.name = Application.names[int(Application.customer)]
         self.grid()
         self.create_widgets()
 
@@ -300,8 +290,8 @@ class Transaction(Tk):
         h = 250
         self['bg']='orange'
         Application.position_window(self, w, h)
-        Transaction.balance = int(Application.balance[Application.customer])
-        Transaction.acct_no = Application.account_no[Application.customer]
+        Transaction.balance = int(Application.balance[int(Application.customer)])
+        Transaction.acct_no = Application.account_no[int(Application.customer)]
         self.grid()
         self.create_widgets()
         Transaction.wm_protocol(self, "WM_DELETE_WINDOW", self.on_closing)
@@ -440,7 +430,7 @@ class Transaction(Tk):
         if type(Application.check_int(self, withdraw_amount)) == int:
             if int(withdraw_amount) <= Transaction.balance:
                 Transaction.balance -= int(withdraw_amount)
-                Application.balance[Application.customer] = Transaction.balance
+                Application.balance[int(Application.customer)] = Transaction.balance
                 transfer_date = datetime.datetime.now()
                 date = str(transfer_date)
                 amount = "-" + str(withdraw_amount)
@@ -458,7 +448,7 @@ class Transaction(Tk):
         deposit_amount = self.deposit_amount.get()
         if type(Application.check_int(self, deposit_amount)) == int:
             Transaction.balance += int(deposit_amount)
-            Application.balance[Application.customer] = Transaction.balance
+            Application.balance[int(Application.customer)] = Transaction.balance
             transfer_date = datetime.datetime.now()
             date = str(transfer_date)
             amount = "+" + str(deposit_amount)
@@ -490,7 +480,7 @@ class Transaction(Tk):
         if type(Application.check_int(self, transfer_amount)) == int:
             if int(transfer_amount) <= Transaction.balance:
                 Transaction.balance -= int(transfer_amount)
-                Application.balance[Application.customer] = Transaction.balance
+                Application.balance[int(Application.customer)] = Transaction.balance
                 transfer_date = datetime.datetime.now()
                 date = str(transfer_date)
                 amount = "-" + str(transfer_amount)
@@ -547,5 +537,24 @@ class Transaction(Tk):
 
 
 if __name__ == "__main__":
+    conn = sqlite3.connect("data/atm.db");
+    cursor = conn.cursor();
+
+    trxn_id = [];
+    names = {};
+    account_balance = {};
+    account_no = {};
+    pins = {};
+
+    for t in cursor.execute('SELECT * FROM Trxn'):
+        trxn_id.append(t[0]);
+    for x in cursor.execute('SELECT * FROM Customers'):
+        names[x[0]] = x[1];
+        account_balance[x[0]] = x[3];
+        account_no[x[0]] = x[4];
+        pins[x[0]] = x[5];
+
+    cursor.close();
+    conn.close();
     app = Application()
     app.mainloop()
